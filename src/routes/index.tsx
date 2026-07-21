@@ -1,20 +1,56 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState, type FormEvent } from "react";
-import { planTrip, type Itinerary } from "@/lib/trip-planner.functions";
+import {
+  planTrip,
+  INTERESTS,
+  type Itinerary,
+} from "@/lib/trip-planner.functions";
 
 export const Route = createFileRoute("/")({
   component: Index,
 });
+
+type Style = "relaxed" | "balanced" | "packed";
+type Diet = "none" | "vegetarian" | "vegan" | "jain" | "halal" | "gluten-free";
+type Interest = (typeof INTERESTS)[number];
+
+const STYLE_OPTIONS: { value: Style; label: string }[] = [
+  { value: "relaxed", label: "Relaxed" },
+  { value: "balanced", label: "Balanced" },
+  { value: "packed", label: "Packed" },
+];
+
+const DIET_OPTIONS: { value: Diet; label: string }[] = [
+  { value: "none", label: "No preference" },
+  { value: "vegetarian", label: "Vegetarian" },
+  { value: "vegan", label: "Vegan" },
+  { value: "jain", label: "Jain" },
+  { value: "halal", label: "Halal" },
+  { value: "gluten-free", label: "Gluten-free" },
+];
 
 function Index() {
   const plan = useServerFn(planTrip);
   const [city, setCity] = useState("");
   const [days, setDays] = useState(3);
   const [budget, setBudget] = useState(2500);
+  const [style, setStyle] = useState<Style>("balanced");
+  const [interests, setInterests] = useState<Interest[]>([
+    "Culture & heritage",
+    "Food & markets",
+  ]);
+  const [diet, setDiet] = useState<Diet>("none");
+  const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
+
+  function toggleInterest(i: Interest) {
+    setInterests((prev) =>
+      prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i]
+    );
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -22,7 +58,17 @@ function Index() {
     setLoading(true);
     setItinerary(null);
     try {
-      const res = await plan({ data: { city: city.trim(), days, budget } });
+      const res = await plan({
+        data: {
+          city: city.trim(),
+          days,
+          budget,
+          style,
+          interests,
+          diet,
+          notes: notes.trim() || undefined,
+        },
+      });
       setItinerary(res);
     } catch (err) {
       console.error(err);
@@ -46,7 +92,9 @@ function Index() {
           </div>
           <div className="min-w-0">
             <h1 className="truncate text-lg font-semibold">Yatra</h1>
-            <p className="truncate text-xs text-muted-foreground">AI trip planner for India</p>
+            <p className="truncate text-xs text-muted-foreground">
+              AI trip planner for India
+            </p>
           </div>
         </div>
       </header>
@@ -62,7 +110,7 @@ function Index() {
               <span className="text-primary">crafted by AI</span>.
             </h2>
             <p className="mt-3 text-base text-muted-foreground">
-              Tell us where you're going, for how long, and your daily budget. We'll do the rest.
+              Tell us where, how long, your budget, and what you love. We'll do the rest.
             </p>
           </div>
 
@@ -70,7 +118,7 @@ function Index() {
             onSubmit={onSubmit}
             className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
           >
-            <div className="space-y-5">
+            <div className="space-y-6">
               <Field label="City" htmlFor="city">
                 <input
                   id="city"
@@ -110,6 +158,65 @@ function Index() {
                 </Field>
               </div>
 
+              <Field label="Travel style">
+                <ChipGroup>
+                  {STYLE_OPTIONS.map((o) => (
+                    <Chip
+                      key={o.value}
+                      selected={style === o.value}
+                      onClick={() => setStyle(o.value)}
+                    >
+                      {o.label}
+                    </Chip>
+                  ))}
+                </ChipGroup>
+              </Field>
+
+              <Field label="Interests">
+                <ChipGroup>
+                  {INTERESTS.map((i) => (
+                    <Chip
+                      key={i}
+                      selected={interests.includes(i)}
+                      onClick={() => toggleInterest(i)}
+                    >
+                      {i}
+                    </Chip>
+                  ))}
+                </ChipGroup>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Pick any that matter to you.
+                </p>
+              </Field>
+
+              <Field label="Dietary preference">
+                <ChipGroup>
+                  {DIET_OPTIONS.map((o) => (
+                    <Chip
+                      key={o.value}
+                      selected={diet === o.value}
+                      onClick={() => setDiet(o.value)}
+                    >
+                      {o.label}
+                    </Chip>
+                  ))}
+                </ChipGroup>
+              </Field>
+
+              <Field label="Anything else? (optional)" htmlFor="notes">
+                <textarea
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value.slice(0, 200))}
+                  placeholder="Traveling with kids, avoid spicy food, prefer mornings..."
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-input bg-background px-4 py-3 text-base outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+                <p className="mt-1 text-right text-xs text-muted-foreground">
+                  {notes.length}/200
+                </p>
+              </Field>
+
               <button
                 type="submit"
                 disabled={loading || !city.trim()}
@@ -147,7 +254,7 @@ function Field({
   children,
 }: {
   label: string;
-  htmlFor: string;
+  htmlFor?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -157,6 +264,35 @@ function Field({
       </label>
       {children}
     </div>
+  );
+}
+
+function ChipGroup({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-wrap gap-2">{children}</div>;
+}
+
+function Chip({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
+        selected
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-input bg-background text-foreground hover:border-primary/60 hover:bg-primary-soft"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
